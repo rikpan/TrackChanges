@@ -24,18 +24,28 @@ function readConfig(): Config {
         enabled: c.get('enabled', true),
         unsavedColor: c.get('unsavedColor', '#EFD700'),
         savedColor: c.get('savedColor', '#57A64A'),
-        revertedColor: c.get('revertedColor', '#F2A33A'),
+        revertedColor: c.get('revertedColor', '#3E8FD8'),
         showInOverviewRuler: c.get('showInOverviewRuler', true),
         maxFileLines: c.get('maxFileLines', 100000),
         debounceMs: c.get('debounceMs', 150),
     };
 }
 
-/** A vertical bar on the right edge of the gutter, stretched to the full line height. */
-function barIcon(color: string): vscode.Uri {
+/**
+ * A vertical bar on the right edge of the gutter, stretched to the full line height.
+ * `hatched` draws it with diagonal stripes, as Visual Studio does for reverted changes.
+ */
+function barIcon(color: string, hatched = false): vscode.Uri {
+    const bar = hatched
+        ? '<defs><pattern id="h" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">' +
+          `<rect width="1.5" height="3" fill="${color}"/></pattern></defs>` +
+          `<rect x="11" y="0" width="5" height="16" fill="${color}" fill-opacity="0.45"/>` +
+          '<rect x="11" y="0" width="5" height="16" fill="url(#h)"/>'
+        : `<rect x="11" y="0" width="5" height="16" fill="${color}"/>`;
     const svg =
         '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" preserveAspectRatio="none">' +
-        `<rect x="11" y="0" width="5" height="16" fill="${color}"/></svg>`;
+        bar +
+        '</svg>';
     return vscode.Uri.parse('data:image/svg+xml;base64,' + Buffer.from(svg).toString('base64'));
 }
 
@@ -71,6 +81,13 @@ class TrackChanges implements vscode.Disposable {
             vscode.commands.registerCommand('trackChanges.resetAll', () => this.resetAll()),
             vscode.commands.registerCommand('trackChanges.nextChange', () => this.goToChange(1)),
             vscode.commands.registerCommand('trackChanges.previousChange', () => this.goToChange(-1)),
+            // Not in package.json, so not in the Command Palette; used by the integration tests.
+            vscode.commands.registerCommand('trackChanges._marks', (uri?: vscode.Uri) => {
+                const doc = uri
+                    ? vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString())
+                    : vscode.window.activeTextEditor?.document;
+                return doc ? this.classification(doc) : undefined;
+            }),
         );
 
         this.renderAll();
@@ -124,14 +141,13 @@ class TrackChanges implements vscode.Disposable {
             text: c.text,
         }));
         const hash = hashText(doc.getText());
-        const lineAt = (line: number) => (line < doc.lineCount ? doc.lineAt(line).text : '');
         const tracker = state.tracker;
         if (e.reason === vscode.TextDocumentChangeReason.Undo) {
-            tracker.undo(changes, hash, lineAt);
+            tracker.undo(changes, hash);
         } else if (e.reason === vscode.TextDocumentChangeReason.Redo) {
-            tracker.redo(changes, hash, lineAt);
+            tracker.redo(changes, hash);
         } else {
-            tracker.edit(changes, hash, lineAt);
+            tracker.edit(changes, hash);
             // Content replaced from disk ("Revert File", reload after an external change).
             if (!doc.isDirty && doc.uri.scheme !== 'untitled') {
                 tracker.save();
@@ -178,10 +194,10 @@ class TrackChanges implements vscode.Disposable {
     }
 
     private createDecorationTypes(): void {
-        const make = (color: string) =>
+        const make = (color: string, hatched = false) =>
             vscode.window.createTextEditorDecorationType({
                 isWholeLine: true,
-                gutterIconPath: barIcon(color),
+                gutterIconPath: barIcon(color, hatched),
                 gutterIconSize: 'cover',
                 overviewRulerColor: this.config.showInOverviewRuler ? color : undefined,
                 overviewRulerLane: vscode.OverviewRulerLane.Left,
@@ -190,7 +206,7 @@ class TrackChanges implements vscode.Disposable {
         this.types = {
             unsaved: make(this.config.unsavedColor),
             saved: make(this.config.savedColor),
-            reverted: make(this.config.revertedColor),
+            reverted: make(this.config.revertedColor, true),
         };
     }
 

@@ -8,7 +8,9 @@
  * - saving turns the current changes green;
  * - undo restores the marks from before the edit, so an undone change leaves
  *   no mark; but undoing an edit that had already been saved marks the lines
- *   orange (they now differ from the file on disk);
+ *   "reverted" (blue, hatched): they differ from the file on disk;
+ * - saving resolves a reverted line to the mark it had before the undone
+ *   edit: no mark if it was untouched, green if it had a saved change;
  * - redo restores the marks from after the edit.
  *
  * No dependency on the vscode API, so it can be unit tested with plain Node.
@@ -29,17 +31,14 @@ export interface Marks {
     unsaved: number[];
     /** Changed and saved (green). */
     saved: number[];
-    /** Saved change that was undone (orange). */
+    /** A saved change was undone; resolves on the next save (blue, hatched). */
     reverted: number[];
 }
-
-/** Returns the text of a line of the document after the change. */
-export type LineAt = (line: number) => string;
 
 /**
  * Each line holds a token: 0 for "untouched", otherwise the id of the edit
  * that last changed it. A token is green if it is part of the saved file,
- * orange if it was created by undoing a saved edit, and yellow otherwise.
+ * reverted if it is a key of revertedBase, and yellow otherwise.
  */
 type Snapshot = Int32Array; // run-length encoded: [token, count, token, count, ...]
 
@@ -59,8 +58,8 @@ export class LineTracker {
     private redoStack: Entry[] = [];
     /** Tokens that are part of the file as last saved. */
     private savedTokens = new Set<number>();
-    /** Tokens created by undoing a saved edit. */
-    private revertedTokens = new Set<number>();
+    /** Reverted token -> the token the line had before the undone edit. */
+    private revertedBase = new Map<number, number>();
 
     constructor(lineCount: number, textHash: string, private readonly maxHistory = 5000) {
         this.lines = new Array(Math.max(lineCount, 1)).fill(0);
@@ -72,7 +71,7 @@ export class LineTracker {
     }
 
     /** A normal edit (typing, paste, format, ...). */
-    edit(changes: TextChange[], newHash: string, lineAt: LineAt): void {
+    edit(changes: TextChange[], newHash: string): void {
         const real = changes.filter((c) => c.text !== '' || c.startLine !== c.endLine || c.startChar !== c.endChar);
         if (real.length === 0) {
             this.hash = newHash;
@@ -81,7 +80,7 @@ export class LineTracker {
         const id = this.nextToken++;
         const before = encode(this.lines);
         const hashBefore = this.hash;
-        this.apply(real, lineAt, id);
+        this.apply(real, id);
         this.hash = newHash;
         this.undoStack.push({ id, before, after: encode(this.lines), hashBefore, hashAfter: newHash });
         if (this.undoStack.length > this.maxHistory) {
@@ -91,7 +90,7 @@ export class LineTracker {
     }
 
     /** An undo. VS Code may undo several of our edits at once (typing is grouped). */
-    undo(changes: TextChange[], newHash: string, lineAt: LineAt): void {
+    undo(changes: TextChange[], newHash: string): void {
         let i = this.undoStack.length - 1;
         while (i >= 0 && this.undoStack[i].hashBefore !== newHash) {
             i--;
@@ -99,16 +98,23 @@ export class LineTracker {
         const restored = i >= 0 ? decode(this.undoStack[i].before) : undefined;
         if (!restored || restored.length !== this.expectedLength(changes)) {
             // History out of sync (e.g. edits made before tracking started).
-            this.edit(changes, newHash, lineAt);
+            this.edit(changes, newHash);
             return;
         }
         const undone = this.undoStack.splice(i); // oldest first
         this.redoStack.push(...undone.slice().reverse()); // oldest ends on top
         this.restore(changes, restored);
         if (undone.some((e) => this.savedTokens.has(e.id))) {
-            const token = this.nextToken++;
-            this.revertedTokens.add(token);
-            for (const line of this.touchedLines(changes, lineAt)) {
+            // One reverted token per distinct underlying mark.
+            const byBase = new Map<number, number>();
+            for (const line of this.touchedLines(changes)) {
+                const base = this.baseOf(this.lines[line]);
+                let token = byBase.get(base);
+                if (token === undefined) {
+                    token = this.nextToken++;
+                    byBase.set(base, token);
+                    this.revertedBase.set(token, base);
+                }
                 this.lines[line] = token;
             }
         }
@@ -116,14 +122,14 @@ export class LineTracker {
     }
 
     /** A redo. */
-    redo(changes: TextChange[], newHash: string, lineAt: LineAt): void {
+    redo(changes: TextChange[], newHash: string): void {
         let i = this.redoStack.length - 1;
         while (i >= 0 && this.redoStack[i].hashAfter !== newHash) {
             i--;
         }
         const restored = i >= 0 ? decode(this.redoStack[i].after) : undefined;
         if (!restored || restored.length !== this.expectedLength(changes)) {
-            this.edit(changes, newHash, lineAt);
+            this.edit(changes, newHash);
             return;
         }
         const redone = this.redoStack.splice(i).reverse(); // oldest first
@@ -134,6 +140,10 @@ export class LineTracker {
 
     /** The document was saved: everything currently in it is on disk. */
     save(): void {
+        // Reverted lines now match the disk: show the mark they had before the undone edit.
+        for (let i = 0; i < this.lines.length; i++) {
+            this.lines[i] = this.baseOf(this.lines[i]);
+        }
         this.savedTokens = new Set(this.lines);
         for (const e of this.undoStack) {
             this.savedTokens.add(e.id);
@@ -147,7 +157,7 @@ export class LineTracker {
         this.undoStack = [];
         this.redoStack = [];
         this.savedTokens.clear();
-        this.revertedTokens.clear();
+        this.revertedBase.clear();
     }
 
     /** Defensive: keep the line array the same length as the document. */
@@ -169,10 +179,10 @@ export class LineTracker {
             if (t === 0) {
                 continue;
             }
-            if (this.savedTokens.has(t)) {
-                result.saved.push(line);
-            } else if (this.revertedTokens.has(t)) {
+            if (this.revertedBase.has(t)) {
                 result.reverted.push(line);
+            } else if (this.savedTokens.has(t)) {
+                result.saved.push(line);
             } else {
                 result.unsaved.push(line);
             }
@@ -181,6 +191,10 @@ export class LineTracker {
     }
 
     // ---- internals ----------------------------------------------------------
+
+    private baseOf(token: number): number {
+        return this.revertedBase.get(token) ?? token;
+    }
 
     /** Changes sorted top to bottom, with their start line after the change. */
     private layout(changes: TextChange[]) {
@@ -199,22 +213,16 @@ export class LineTracker {
         return this.lines.length + this.layout(changes).delta;
     }
 
-    private apply(changes: TextChange[], lineAt: LineAt, token: number): void {
+    /**
+     * Mark every line the change spans after it is applied. Pressing Enter
+     * marks both the line the cursor was on and the new line, as in Visual Studio.
+     */
+    private apply(changes: TextChange[], token: number): void {
         const { sorted } = this.layout(changes);
         // Bottom-up, so the "before" coordinates of the remaining changes stay valid.
         for (let i = sorted.length - 1; i >= 0; i--) {
-            const { c, nl, post } = sorted[i];
-            const [from, to] = touchedRange(c, nl, post, lineAt);
-            const replacement = new Array<number>(nl + 1);
-            for (let k = 0; k <= nl; k++) {
-                const line = post + k;
-                if (line >= from && line <= to) {
-                    replacement[k] = token;
-                } else {
-                    // Untouched first or last line keeps its previous mark.
-                    replacement[k] = k === 0 ? this.lines[c.startLine] ?? 0 : this.lines[c.endLine] ?? 0;
-                }
-            }
+            const { c, nl } = sorted[i];
+            const replacement = new Array<number>(nl + 1).fill(token);
             this.lines = this.lines.slice(0, c.startLine).concat(replacement, this.lines.slice(c.endLine + 1));
         }
         if (this.lines.length === 0) {
@@ -224,7 +232,7 @@ export class LineTracker {
 
     /**
      * Take the marks of the lines this undo/redo rewrote from the snapshot;
-     * every other line keeps its current mark (e.g. orange from an earlier undo).
+     * every other line keeps its current mark (e.g. yellow from an earlier undo).
      */
     private restore(changes: TextChange[], snapshot: number[]): void {
         const { sorted } = this.layout(changes);
@@ -235,38 +243,16 @@ export class LineTracker {
         }
     }
 
-    private touchedLines(changes: TextChange[], lineAt: LineAt): number[] {
+    /** Lines (after the change) that the change spans. */
+    private touchedLines(changes: TextChange[]): number[] {
         const result: number[] = [];
-        for (const { c, nl, post } of this.layout(changes).sorted) {
-            const [from, to] = touchedRange(c, nl, post, lineAt);
-            for (let line = from; line <= to && line < this.lines.length; line++) {
+        for (const { nl, post } of this.layout(changes).sorted) {
+            for (let line = post; line <= post + nl && line < this.lines.length; line++) {
                 result.push(line);
             }
         }
         return result;
     }
-}
-
-/**
- * Lines (after the change) whose content the change actually touched.
- * Pressing Enter at the end of a line only marks the new line; inserting
- * whole lines at column 0 does not mark the line pushed down.
- */
-function touchedRange(c: TextChange, nl: number, post: number, lineAt: LineAt): [number, number] {
-    const pureInsert = c.startLine === c.endLine && c.startChar === c.endChar;
-    if (pureInsert && nl >= 1) {
-        const segs = c.text.split(/\r?\n/);
-        const first = segs[0];
-        const last = segs[segs.length - 1];
-        const remainder = lineAt(post + nl).length - last.length;
-        if (first === '' && remainder === 0) {
-            return [post + 1, post + nl];
-        }
-        if (last === '' && c.startChar === 0) {
-            return [post, post + nl - 1];
-        }
-    }
-    return [post, post + nl];
 }
 
 function countNewlines(text: string): number {

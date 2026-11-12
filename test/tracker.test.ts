@@ -19,8 +19,6 @@ class Editor {
         return this.lines.join('\n');
     }
 
-    private lineAt = (n: number) => this.lines[n] ?? '';
-
     /** Replace a range; returns the inverse change. */
     private applyRaw(c: TextChange): TextChange {
         const before = this.lines.slice(c.startLine, c.endLine + 1).join('\n');
@@ -50,7 +48,7 @@ class Editor {
         }
         this.grouping = true;
         this.redoGroups = [];
-        this.tracker.edit([c], hashText(this.text), this.lineAt);
+        this.tracker.edit([c], hashText(this.text));
         return this;
     }
 
@@ -74,7 +72,7 @@ class Editor {
         }
         this.redoGroups.push(redo);
         this.grouping = false;
-        this.tracker.undo(group.length === 1 ? group : [mergeSequential(group)], hashText(this.text), this.lineAt);
+        this.tracker.undo(group.length === 1 ? group : [mergeSequential(group)], hashText(this.text));
         return this;
     }
 
@@ -87,7 +85,7 @@ class Editor {
         }
         this.undoGroups.push(undo);
         this.grouping = false;
-        this.tracker.redo(group.length === 1 ? group : [mergeSequential(group)], hashText(this.text), this.lineAt);
+        this.tracker.redo(group.length === 1 ? group : [mergeSequential(group)], hashText(this.text));
         return this;
     }
 
@@ -122,9 +120,9 @@ test('typing marks the line yellow', () => {
     assert.deepEqual(doc().type(1, 5, 'x').marks(), { ...none, unsaved: [1] });
 });
 
-test('Enter at end of line, then undo: no marks', () => {
+test('Enter at end of line marks the cursor line and the new line; undo: no marks', () => {
     const e = doc().type(1, 5, '\n    ');
-    assert.deepEqual(e.marks(), { ...none, unsaved: [2] });
+    assert.deepEqual(e.marks(), { ...none, unsaved: [1, 2] });
     assert.deepEqual(e.undo().marks(), none);
 });
 
@@ -132,8 +130,15 @@ test('Enter in the middle of a line marks both halves', () => {
     assert.deepEqual(doc().type(1, 2, '\n').marks(), { ...none, unsaved: [1, 2] });
 });
 
-test('Enter at column 0 marks only the new empty line', () => {
-    assert.deepEqual(doc().type(1, 0, '\n').marks(), { ...none, unsaved: [1] });
+test('Enter at column 0 marks the cursor line and the next line', () => {
+    assert.deepEqual(doc().type(1, 0, '\n').marks(), { ...none, unsaved: [1, 2] });
+});
+
+test('Enter, save, undo: cursor line reverted; save again: no marks', () => {
+    const e = doc().type(1, 5, '\n').save();
+    assert.deepEqual(e.marks(), { ...none, saved: [1, 2] });
+    assert.deepEqual(e.undo().marks(), { ...none, reverted: [1] });
+    assert.deepEqual(e.save().marks(), none);
 });
 
 test('typing then Backspace keeps the line yellow (edits, not content)', () => {
@@ -152,22 +157,22 @@ test('save turns changes green', () => {
     assert.deepEqual(doc().type(1, 5, 'x').save().marks(), { ...none, saved: [1] });
 });
 
-test('save then undo: orange', () => {
+test('save then undo: reverted', () => {
     const e = doc().type(1, 5, 'x').save().undo();
     assert.deepEqual(e.marks(), { ...none, reverted: [1] });
 });
 
-test('save, undo (orange), redo: green again', () => {
+test('save, undo (reverted), redo: green again', () => {
     const e = doc().type(1, 5, 'x').save().undo().redo();
     assert.deepEqual(e.marks(), { ...none, saved: [1] });
 });
 
-test('orange, then save: green', () => {
+test('save, undo, save: no marks (line is back to its original state)', () => {
     const e = doc().type(1, 5, 'x').save().undo().save();
-    assert.deepEqual(e.marks(), { ...none, saved: [1] });
+    assert.deepEqual(e.marks(), none);
 });
 
-test('orange, save, redo: yellow (differs from disk again)', () => {
+test('save, undo, save, redo: yellow (differs from disk again)', () => {
     const e = doc().type(1, 5, 'x').save().undo().save().redo();
     assert.deepEqual(e.marks(), { ...none, unsaved: [1] });
 });
@@ -185,7 +190,7 @@ test('green and yellow lines side by side', () => {
 
 test('marks move with inserted lines', () => {
     const e = doc().type(2, 5, 'x').type(0, 0, 'new\n');
-    assert.deepEqual(e.marks(), { ...none, unsaved: [0, 3] });
+    assert.deepEqual(e.marks(), { ...none, unsaved: [0, 1, 3] });
 });
 
 test('deleting lines marks the line where they were', () => {
@@ -207,30 +212,40 @@ test('new edit after undo clears redo history', () => {
     assert.deepEqual(e.marks(), { ...none, unsaved: [2] });
 });
 
-test('two saves, undo both: both lines orange', () => {
+test('two saves, undo both: both lines reverted; save: no marks', () => {
     const e = doc().type(0, 5, 'a').save().type(2, 5, 'b').save().undo();
     assert.deepEqual(e.marks(), { ...none, saved: [0], reverted: [2] });
     assert.deepEqual(e.undo().marks(), { ...none, reverted: [0, 2] });
+    assert.deepEqual(e.save().marks(), none);
+});
+
+test('two saved edits on one line, undo the second, save: green (first change remains)', () => {
+    const e = doc().type(1, 5, 'a').save().type(1, 6, 'b').save().undo();
+    assert.deepEqual(e.marks(), { ...none, reverted: [1] });
+    assert.deepEqual(e.save().marks(), { ...none, saved: [1] });
+});
+
+test('reverted line edited again turns yellow', () => {
+    const e = doc().type(1, 5, 'x').save().undo().type(1, 0, 'y');
+    assert.deepEqual(e.marks(), { ...none, unsaved: [1] });
 });
 
 test('multi-cursor edit in one event', () => {
     const t = new LineTracker(4, 'h0');
     const lines = ['line0', 'line1', 'line2', 'line3'];
-    const lineAt = (n: number) => lines[n];
     t.edit(
         [
             { startLine: 3, startChar: 0, endLine: 3, endChar: 0, text: '#' },
             { startLine: 1, startChar: 0, endLine: 1, endChar: 0, text: '#' },
         ],
         'h1',
-        lineAt,
     );
     assert.deepEqual(t.marks(), { ...none, unsaved: [1, 3] });
 });
 
 test('undo with no matching history falls back to marking yellow', () => {
     const t = new LineTracker(2, 'h0');
-    t.undo([{ startLine: 0, startChar: 0, endLine: 0, endChar: 1, text: '' }], 'unknown', () => 'x');
+    t.undo([{ startLine: 0, startChar: 0, endLine: 0, endChar: 1, text: '' }], 'unknown');
     assert.deepEqual(t.marks(), { ...none, unsaved: [0] });
 });
 

@@ -1,9 +1,10 @@
 {
   "name": "track-changes",
   "displayName": "Track Changes",
-  "description": "Visual Studio style change tracking in the gutter: yellow for unsaved changes, green for saved changes, orange for saved changes that were undone.",
-  "version": "0.2.0",
-  "publisher": "zhangyg",
+  "description": "Visual Studio style change tracking in the gutter: yellow for unsaved changes, green for saved changes, blue hatched for saved changes that were undone.",
+  "version": "0.4.0",
+  "publisher": "rikpan",
+  "author": "rikpan",
   "license": "MIT",
   "engines": {
     "vscode": "^1.75.0"
@@ -83,8 +84,8 @@
         },
         "trackChanges.revertedColor": {
           "type": "string",
-          "default": "#F2A33A",
-          "description": "Color of the mark for lines whose saved change was undone (Visual Studio: orange)."
+          "default": "#3E8FD8",
+          "description": "Color of the hatched mark for lines whose saved change was undone. It goes away on the next save if the line is back to its earlier state (Visual Studio: blue, hatched)."
         },
         "trackChanges.showInOverviewRuler": {
           "type": "boolean",
@@ -116,6 +117,7 @@
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.75.0",
+    "@vscode/test-electron": "^3.1.0",
     "typescript": "^5.4.0"
   }
 }

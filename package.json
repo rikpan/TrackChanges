@@ -1,11 +1,19 @@
 {
   "name": "track-changes",
   "displayName": "Track Changes",
-  "description": "Visual Studio style change tracking in the gutter: yellow for unsaved changes, green for saved changes, blue hatched for saved changes that were undone.",
-  "version": "0.4.0",
+  "description": "%description%",
+  "version": "0.5.0",
   "publisher": "rikpan",
   "author": "rikpan",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rikpan/TrackChanges.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rikpan/TrackChanges/issues"
+  },
+  "homepage": "https://github.com/rikpan/TrackChanges#readme",
   "engines": {
     "vscode": "^1.75.0"
   },
@@ -26,28 +34,28 @@
     "commands": [
       {
         "command": "trackChanges.toggle",
-        "title": "Toggle Track Changes",
-        "category": "Track Changes"
+        "title": "%command.toggle%",
+        "category": "%category%"
       },
       {
         "command": "trackChanges.reset",
-        "title": "Reset Tracking for Current File",
-        "category": "Track Changes"
+        "title": "%command.reset%",
+        "category": "%category%"
       },
       {
         "command": "trackChanges.resetAll",
-        "title": "Reset Tracking for All Files",
-        "category": "Track Changes"
+        "title": "%command.resetAll%",
+        "category": "%category%"
       },
       {
         "command": "trackChanges.nextChange",
-        "title": "Go to Next Change",
-        "category": "Track Changes"
+        "title": "%command.nextChange%",
+        "category": "%category%"
       },
       {
         "command": "trackChanges.previousChange",
-        "title": "Go to Previous Change",
-        "category": "Track Changes"
+        "title": "%command.previousChange%",
+        "category": "%category%"
       }
     ],
     "keybindings": [
@@ -65,44 +73,66 @@
       }
     ],
     "configuration": {
-      "title": "Track Changes",
+      "title": "%config.title%",
       "properties": {
         "trackChanges.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Show change tracking marks in the editor gutter."
+          "description": "%config.enabled%"
         },
         "trackChanges.unsavedColor": {
           "type": "string",
           "default": "#EFD700",
-          "description": "Color of the mark for lines changed but not yet saved (Visual Studio: yellow)."
+          "description": "%config.unsavedColor%"
         },
         "trackChanges.savedColor": {
           "type": "string",
           "default": "#57A64A",
-          "description": "Color of the mark for lines changed and saved since the file was opened (Visual Studio: green)."
+          "description": "%config.savedColor%"
         },
         "trackChanges.revertedColor": {
           "type": "string",
           "default": "#3E8FD8",
-          "description": "Color of the hatched mark for lines whose saved change was undone. It goes away on the next save if the line is back to its earlier state (Visual Studio: blue, hatched)."
+          "description": "%config.revertedColor%"
+        },
+        "trackChanges.markerWidth": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 16,
+          "description": "%config.markerWidth%"
         },
         "trackChanges.showInOverviewRuler": {
           "type": "boolean",
           "default": true,
-          "description": "Also show change marks in the scrollbar overview ruler."
+          "description": "%config.showInOverviewRuler%"
         },
         "trackChanges.maxFileLines": {
           "type": "number",
           "default": 100000,
           "minimum": 1,
-          "description": "Files with more lines than this are not tracked."
+          "description": "%config.maxFileLines%"
         },
         "trackChanges.debounceMs": {
           "type": "number",
-          "default": 150,
+          "default": 0,
           "minimum": 0,
-          "description": "Delay in milliseconds after typing before the marks are refreshed."
+          "description": "%config.debounceMs%"
+        },
+        "trackChanges.language": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "en",
+            "zh-cn"
+          ],
+          "enumDescriptions": [
+            "%config.language.auto%",
+            "%config.language.en%",
+            "%config.language.zh-cn%"
+          ],
+          "default": "auto",
+          "description": "%config.language%"
         }
       }
     }
@@ -110,7 +140,7 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test": "npm run compile && node --test out/test/tracker.test.js",
+    "test": "npm run compile && node --test out/test/tracker.test.js out/test/i18n.test.js",
     "package": "vsce package",
     "vscode:prepublish": "npm run compile"
   },

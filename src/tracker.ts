@@ -7,10 +7,11 @@
  *   text ends up identical (type a character, then delete it with Backspace);
  * - saving turns the current changes green;
  * - undo restores the marks from before the edit, so an undone change leaves
- *   no mark; but undoing an edit that had already been saved marks the lines
- *   "reverted" (blue, hatched): they differ from the file on disk;
- * - saving resolves a reverted line to the mark it had before the undone
- *   edit: no mark if it was untouched, green if it had a saved change;
+ *   no mark; but undoing an edit that had already been saved leaves the lines
+ *   different from the file on disk:
+ *   - a line back to its content from when the file was opened is
+ *     "reverted" (blue, hatched), and has no mark once saved;
+ *   - a line back to an intermediate state is yellow, and green once saved;
  * - redo restores the marks from after the edit.
  *
  * No dependency on the vscode API, so it can be unit tested with plain Node.
@@ -31,15 +32,17 @@ export interface Marks {
     unsaved: number[];
     /** Changed and saved (green). */
     saved: number[];
-    /** A saved change was undone; resolves on the next save (blue, hatched). */
+    /** Back to its original content by undoing a saved change; not saved yet (blue, hatched). */
     reverted: number[];
 }
 
 /**
- * Each line holds a token: 0 for "untouched", otherwise the id of the edit
- * that last changed it. A token is green if it is part of the saved file,
- * reverted if it is a key of revertedBase, and yellow otherwise.
+ * Each line holds a token: 0 for "untouched", REVERTED, or the id of the edit
+ * that last changed it. An edit token is green if it is part of the saved
+ * file, and yellow otherwise.
  */
+const REVERTED = -1;
+
 type Snapshot = Int32Array; // run-length encoded: [token, count, token, count, ...]
 
 interface Entry {
@@ -58,8 +61,6 @@ export class LineTracker {
     private redoStack: Entry[] = [];
     /** Tokens that are part of the file as last saved. */
     private savedTokens = new Set<number>();
-    /** Reverted token -> the token the line had before the undone edit. */
-    private revertedBase = new Map<number, number>();
 
     constructor(lineCount: number, textHash: string, private readonly maxHistory = 5000) {
         this.lines = new Array(Math.max(lineCount, 1)).fill(0);
@@ -105,17 +106,11 @@ export class LineTracker {
         this.redoStack.push(...undone.slice().reverse()); // oldest ends on top
         this.restore(changes, restored);
         if (undone.some((e) => this.savedTokens.has(e.id))) {
-            // One reverted token per distinct underlying mark.
-            const byBase = new Map<number, number>();
+            // The touched lines now differ from the disk.
+            const unsaved = this.nextToken++; // new token, not in savedTokens
             for (const line of this.touchedLines(changes)) {
-                const base = this.baseOf(this.lines[line]);
-                let token = byBase.get(base);
-                if (token === undefined) {
-                    token = this.nextToken++;
-                    byBase.set(base, token);
-                    this.revertedBase.set(token, base);
-                }
-                this.lines[line] = token;
+                const before = this.lines[line];
+                this.lines[line] = before === 0 || before === REVERTED ? REVERTED : unsaved;
             }
         }
         this.hash = newHash;
@@ -140,9 +135,11 @@ export class LineTracker {
 
     /** The document was saved: everything currently in it is on disk. */
     save(): void {
-        // Reverted lines now match the disk: show the mark they had before the undone edit.
+        // Reverted lines are back to their original content, now also on disk.
         for (let i = 0; i < this.lines.length; i++) {
-            this.lines[i] = this.baseOf(this.lines[i]);
+            if (this.lines[i] === REVERTED) {
+                this.lines[i] = 0;
+            }
         }
         this.savedTokens = new Set(this.lines);
         for (const e of this.undoStack) {
@@ -157,7 +154,6 @@ export class LineTracker {
         this.undoStack = [];
         this.redoStack = [];
         this.savedTokens.clear();
-        this.revertedBase.clear();
     }
 
     /** Defensive: keep the line array the same length as the document. */
@@ -179,7 +175,7 @@ export class LineTracker {
             if (t === 0) {
                 continue;
             }
-            if (this.revertedBase.has(t)) {
+            if (t === REVERTED) {
                 result.reverted.push(line);
             } else if (this.savedTokens.has(t)) {
                 result.saved.push(line);
@@ -191,10 +187,6 @@ export class LineTracker {
     }
 
     // ---- internals ----------------------------------------------------------
-
-    private baseOf(token: number): number {
-        return this.revertedBase.get(token) ?? token;
-    }
 
     /** Changes sorted top to bottom, with their start line after the change. */
     private layout(changes: TextChange[]) {

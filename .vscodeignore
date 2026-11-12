@@ -6,3 +6,4 @@ out/test/**
 **/*.ts
 tsconfig.json
 .gitignore
+docs/**

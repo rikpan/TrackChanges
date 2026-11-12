@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { Language, message, MessageKey, resolveLanguage } from './i18n';
 import { hashText, LineTracker, Marks, TextChange } from './tracker';
 
 const TRACKED_SCHEMES = new Set(['file', 'untitled', 'vscode-remote', 'vscode-vfs', 'vscode-userdata']);
@@ -13,9 +14,11 @@ interface Config {
     unsavedColor: string;
     savedColor: string;
     revertedColor: string;
+    markerWidth: number;
     showInOverviewRuler: boolean;
     maxFileLines: number;
     debounceMs: number;
+    language: Language;
 }
 
 function readConfig(): Config {
@@ -25,23 +28,27 @@ function readConfig(): Config {
         unsavedColor: c.get('unsavedColor', '#EFD700'),
         savedColor: c.get('savedColor', '#57A64A'),
         revertedColor: c.get('revertedColor', '#3E8FD8'),
+        markerWidth: Math.min(16, Math.max(1, c.get('markerWidth', 3))),
         showInOverviewRuler: c.get('showInOverviewRuler', true),
         maxFileLines: c.get('maxFileLines', 100000),
-        debounceMs: c.get('debounceMs', 150),
+        debounceMs: c.get('debounceMs', 0),
+        language: resolveLanguage(c.get<string>('language'), vscode.env.language),
     };
 }
 
 /**
  * A vertical bar on the right edge of the gutter, stretched to the full line height.
+ * `width` is in sixteenths of the gutter icon area (about one pixel each).
  * `hatched` draws it with diagonal stripes, as Visual Studio does for reverted changes.
  */
-function barIcon(color: string, hatched = false): vscode.Uri {
+function barIcon(color: string, width: number, hatched = false): vscode.Uri {
+    const rect = `x="${16 - width}" y="0" width="${width}" height="16"`;
     const bar = hatched
-        ? '<defs><pattern id="h" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">' +
-          `<rect width="1.5" height="3" fill="${color}"/></pattern></defs>` +
-          `<rect x="11" y="0" width="5" height="16" fill="${color}" fill-opacity="0.45"/>` +
-          '<rect x="11" y="0" width="5" height="16" fill="url(#h)"/>'
-        : `<rect x="11" y="0" width="5" height="16" fill="${color}"/>`;
+        ? '<defs><pattern id="h" width="2.5" height="2.5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">' +
+          `<rect width="1.25" height="2.5" fill="${color}"/></pattern></defs>` +
+          `<rect ${rect} fill="${color}" fill-opacity="0.45"/>` +
+          `<rect ${rect} fill="url(#h)"/>`
+        : `<rect ${rect} fill="${color}"/>`;
     const svg =
         '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" preserveAspectRatio="none">' +
         bar +
@@ -148,18 +155,40 @@ class TrackChanges implements vscode.Disposable {
             tracker.redo(changes, hash);
         } else {
             tracker.edit(changes, hash);
-            // Content replaced from disk ("Revert File", reload after an external change).
-            if (!doc.isDirty && doc.uri.scheme !== 'untitled') {
-                tracker.save();
+            if (doc.uri.scheme !== 'untitled') {
+                this.checkReplacedFromDisk(doc, state);
             }
         }
         tracker.sync(doc.lineCount);
         this.scheduleRender(doc, state);
     }
 
+    /**
+     * "Revert File" or a reload after an external change replaces the content
+     * with what is on disk, leaving the document not dirty: treat it as a save.
+     *
+     * `isDirty` cannot be read during the change event: on the first edit after
+     * opening or saving it can still be false, which would turn a normal edit
+     * green. So check once it has settled, and only if nothing changed since.
+     */
+    private checkReplacedFromDisk(doc: vscode.TextDocument, state: DocState): void {
+        const version = doc.version;
+        setTimeout(() => {
+            if (this.docs.get(doc.uri.toString()) === state && doc.version === version && !doc.isDirty) {
+                state.tracker.save();
+                this.renderDoc(doc);
+            }
+        }, 100);
+    }
+
     private scheduleRender(doc: vscode.TextDocument, state: DocState): void {
         if (state.timer) {
             clearTimeout(state.timer);
+            state.timer = undefined;
+        }
+        if (this.config.debounceMs <= 0) {
+            this.renderDoc(doc); // same tick as the edit, so marks never lag behind
+            return;
         }
         state.timer = setTimeout(() => {
             state.timer = undefined;
@@ -197,7 +226,7 @@ class TrackChanges implements vscode.Disposable {
         const make = (color: string, hatched = false) =>
             vscode.window.createTextEditorDecorationType({
                 isWholeLine: true,
-                gutterIconPath: barIcon(color, hatched),
+                gutterIconPath: barIcon(color, this.config.markerWidth, hatched),
                 gutterIconSize: 'cover',
                 overviewRulerColor: this.config.showInOverviewRuler ? color : undefined,
                 overviewRulerLane: vscode.OverviewRulerLane.Left,
@@ -216,11 +245,15 @@ class TrackChanges implements vscode.Disposable {
 
     // ---- commands -----------------------------------------------------------
 
+    private t(key: MessageKey): string {
+        return message(key, this.config.language);
+    }
+
     private async toggle(): Promise<void> {
         const config = vscode.workspace.getConfiguration('trackChanges');
         const next = !config.get('enabled', true);
         await config.update('enabled', next, vscode.ConfigurationTarget.Global);
-        vscode.window.setStatusBarMessage(`Track Changes ${next ? 'enabled' : 'disabled'}`, 2000);
+        vscode.window.setStatusBarMessage(this.t(next ? 'enabled' : 'disabled'), 2000);
     }
 
     /** Clear all marks, as if the file had just been opened. */
@@ -258,7 +291,7 @@ class TrackChanges implements vscode.Disposable {
         // Start line of each contiguous block of marked lines.
         const starts = [...marked].filter((l) => !marked.has(l - 1)).sort((a, b) => a - b);
         if (starts.length === 0) {
-            vscode.window.setStatusBarMessage('Track Changes: no changes in this file', 2000);
+            vscode.window.setStatusBarMessage(this.t('noChanges'), 2000);
             return;
         }
 

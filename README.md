@@ -1,58 +1,76 @@
 # Track Changes
 
-在 VS Code 中仿照 Visual Studio 的 **Track Changes**（跟踪更改）功能：在编辑器左侧行号旁显示一条彩色竖条，标出本次打开文件以来修改过的行。
+**English** | [简体中文](README.zh-CN.md)
 
-| 颜色 | 含义 |
+Visual Studio's **Track Changes** for VS Code: a colored bar next to the line numbers marks every line you have changed since the file was opened.
+
+| Color | Meaning |
 | --- | --- |
-| 🟨 黄色 | 已修改，尚未保存 |
-| 🟩 绿色 | 已修改，并且已保存 |
-| 🟦 蓝色斜纹 | 修改已保存，之后又用撤销（Ctrl+Z）撤回了 |
+| 🟨 Yellow | Changed, not saved yet |
+| 🟩 Green | Changed and saved |
+| 🟦 Blue, hatched | Undoing a saved change brought the line back to its content from when the file was opened; not saved yet |
 
-与 Visual Studio 一样，标记来自**编辑操作和撤销历史**，而不是比较文件内容（与 Git 无关）：
+| Unsaved changes | Saved change, then a new edit |
+| --- | --- |
+| ![Lines 8 to 10 marked yellow](docs/screenshot1.png) | ![Line 8 marked green, lines 9 and 10 yellow](docs/screenshot2.png) |
 
-- 每次编辑都会标记它碰到的行。输入一个字符再用 Backspace 删掉，内容虽然没变，这一行仍然是黄色。
-- 按回车会标记光标原来所在的行和新产生的行（两行）。
-- 撤销会恢复编辑之前的标记：按回车再 Ctrl+Z，什么都不留下。
-- 撤销**已保存**的修改，该行显示蓝色斜纹；再保存后恢复为这次修改之前的标记（例如：回车 → 保存 → Ctrl+Z → 保存，最后什么标记都没有）。重做（Ctrl+Y）恢复成绿色。
-- 每次打开文件都从零开始，关闭文件后记录清空。
+As in Visual Studio, the marks come from **your edits and the undo history**, not from comparing file contents (and not from Git):
 
-## 命令
+- Every edit marks the lines it touches. Type a character and delete it with Backspace: the text is unchanged, but the line stays yellow.
+- Pressing Enter marks two lines: the line the cursor was on and the new line.
+- Undo restores the marks from before the edit: press Enter, then Ctrl+Z, and nothing is left.
+- After undoing a **saved** change, the line differs from the file on disk:
+  - if it is back to its content from when the file was opened, it is blue and hatched, and has no mark once saved (Enter → save → Ctrl+Z → save leaves nothing);
+  - if it is back to an intermediate state, it is yellow, and green once saved (Enter → save → Enter → save → Ctrl+Z: the line above is green, the one below yellow).
+- Redo (Ctrl+Y) turns the line green again.
+- Tracking starts fresh each time a file is opened, and is cleared when it is closed.
 
-| 命令 | 说明 | 快捷键 |
+## Commands
+
+| Command | Description | Shortcut |
 | --- | --- | --- |
-| `Track Changes: Toggle Track Changes` | 开/关显示 | |
-| `Track Changes: Reset Tracking for Current File` | 清除当前文件的所有标记，相当于重新打开 | |
-| `Track Changes: Reset Tracking for All Files` | 对所有打开的文件执行上述操作 | |
-| `Track Changes: Go to Next Change` | 跳到下一处修改 | `Ctrl+Alt+↓` / `Cmd+Alt+↓` |
-| `Track Changes: Go to Previous Change` | 跳到上一处修改 | `Ctrl+Alt+↑` / `Cmd+Alt+↑` |
+| `Track Changes: Toggle Track Changes` | Show or hide the marks | |
+| `Track Changes: Reset Tracking for Current File` | Clear all marks in the current file, as if it had just been opened | |
+| `Track Changes: Reset Tracking for All Files` | The same, for every open file | |
+| `Track Changes: Go to Next Change` | Jump to the next changed block | `Ctrl+Alt+↓` / `Cmd+Alt+↓` |
+| `Track Changes: Go to Previous Change` | Jump to the previous changed block | `Ctrl+Alt+↑` / `Cmd+Alt+↑` |
 
-## 设置
+## Settings
 
-| 设置 | 默认值 | 说明 |
+| Setting | Default | Description |
 | --- | --- | --- |
-| `trackChanges.enabled` | `true` | 是否显示标记 |
-| `trackChanges.unsavedColor` | `#EFD700` | 未保存修改的颜色 |
-| `trackChanges.savedColor` | `#57A64A` | 已保存修改的颜色 |
-| `trackChanges.revertedColor` | `#3E8FD8` | 已保存后又撤销的修改（斜纹）的颜色 |
-| `trackChanges.showInOverviewRuler` | `true` | 同时在滚动条概览中显示 |
-| `trackChanges.maxFileLines` | `100000` | 超过此行数的文件不跟踪 |
-| `trackChanges.debounceMs` | `150` | 输入停止后多久刷新标记（毫秒） |
+| `trackChanges.enabled` | `true` | Show the marks |
+| `trackChanges.unsavedColor` | `#EFD700` | Color for unsaved changes |
+| `trackChanges.savedColor` | `#57A64A` | Color for saved changes |
+| `trackChanges.revertedColor` | `#3E8FD8` | Color for lines undone back to their original content (hatched) |
+| `trackChanges.markerWidth` | `3` | Width of the bar, 1–16, about one pixel per unit |
+| `trackChanges.showInOverviewRuler` | `true` | Also show the marks in the scrollbar |
+| `trackChanges.maxFileLines` | `100000` | Files with more lines are not tracked |
+| `trackChanges.debounceMs` | `0` | Delay before the marks refresh after an edit, in milliseconds; 0 is immediate, raise it only if very large files feel slow |
+| `trackChanges.language` | `auto` | Language of the extension's messages: `auto` (follow VS Code), `en`, `zh-cn` |
 
-## 说明
+## Language
 
-- 标记画在 gutter 图标位置。如果同时启用了 VS Code 自带的 Git 修改标记（`scm.diffDecorations`），两者会并排显示；不想重复可以把它设为 `"overview"` 或 `"none"`。
-- 插件启动之前就已有的撤销历史无法对应，撤销这些修改时按普通编辑显示为黄色。
-- 删除行时，标记落在删除位置的下一行（与 Visual Studio 一致）。
+The extension is available in English and Simplified Chinese, and follows the VS Code display language by default (`Configure Display Language` in the Command Palette).
 
-## 开发
+- VS Code picks the language of command names, setting descriptions and the extension description from the display language; an extension cannot change them on its own.
+- The messages the extension shows while running (such as status bar messages) can be set to English or Chinese with `trackChanges.language`.
+
+## Notes
+
+- The marks are drawn where gutter icons go. If VS Code's own Git change marks (`scm.diffDecorations`) are on, both show side by side; set it to `"overview"` or `"none"` to avoid the duplication.
+- Undo history from before the extension started cannot be matched up; undoing those changes marks the lines yellow, like a normal edit.
+- When lines are deleted, the mark goes on the line after the deleted ones, as in Visual Studio.
+
+## Development
 
 ```bash
 npm install
-npm test          # 编译并运行单元测试
+npm test          # compile and run the unit tests
 ```
 
-在 VS Code 中打开本目录，按 `F5` 启动扩展开发宿主进行调试。打包：
+Open this folder in VS Code and press `F5` to start an Extension Development Host. To package:
 
 ```bash
-npx @vscode/vsce package
+npx @vscode/vsce package --skip-license
 ```

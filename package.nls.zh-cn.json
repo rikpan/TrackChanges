@@ -1,0 +1,22 @@
+{
+  "description": "仿照 Visual Studio 的跟踪更改：在行号旁标出修改过的行。黄色为未保存，绿色为已保存，蓝色斜纹为撤销回原始内容。",
+  "category": "跟踪更改",
+  "command.toggle": "开启/关闭跟踪更改",
+  "command.reset": "重置当前文件的跟踪",
+  "command.resetAll": "重置所有文件的跟踪",
+  "command.nextChange": "转到下一处修改",
+  "command.previousChange": "转到上一处修改",
+  "config.title": "跟踪更改 (Track Changes)",
+  "config.enabled": "在编辑器行号旁显示修改标记。",
+  "config.unsavedColor": "已修改但尚未保存的行的标记颜色（Visual Studio：黄色）。",
+  "config.savedColor": "打开文件后修改并已保存的行的标记颜色（Visual Studio：绿色）。",
+  "config.revertedColor": "撤销已保存的修改、回到打开文件时内容的行的斜纹标记颜色。下次保存后消失（Visual Studio：蓝色斜纹）。",
+  "config.markerWidth": "行号旁标记竖条的宽度，单位为图标区域的 1/16（大约 1 像素）。",
+  "config.showInOverviewRuler": "同时在滚动条概览中显示修改标记。",
+  "config.maxFileLines": "行数超过此值的文件不跟踪。",
+  "config.debounceMs": "编辑后延迟多久刷新标记（毫秒）。0 为立即刷新；只在超大文件卡顿时调大。",
+  "config.language": "本插件显示的提示信息的语言。命令名称和设置说明始终跟随 VS Code 的显示语言。",
+  "config.language.auto": "跟随 VS Code 的显示语言。",
+  "config.language.en": "English（英文）",
+  "config.language.zh-cn": "简体中文"
+}

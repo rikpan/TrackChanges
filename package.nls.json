@@ -1,0 +1,22 @@
+{
+  "description": "Visual Studio style change tracking in the gutter: yellow for unsaved changes, green for saved changes, blue hatched for lines undone back to their original content.",
+  "category": "Track Changes",
+  "command.toggle": "Toggle Track Changes",
+  "command.reset": "Reset Tracking for Current File",
+  "command.resetAll": "Reset Tracking for All Files",
+  "command.nextChange": "Go to Next Change",
+  "command.previousChange": "Go to Previous Change",
+  "config.title": "Track Changes",
+  "config.enabled": "Show change tracking marks in the editor gutter.",
+  "config.unsavedColor": "Color of the mark for lines changed but not yet saved (Visual Studio: yellow).",
+  "config.savedColor": "Color of the mark for lines changed and saved since the file was opened (Visual Studio: green).",
+  "config.revertedColor": "Color of the hatched mark for lines that undoing a saved change brought back to their content from when the file was opened. It goes away on the next save (Visual Studio: blue, hatched).",
+  "config.markerWidth": "Width of the change mark in the gutter, in sixteenths of the gutter icon area (about one pixel each).",
+  "config.showInOverviewRuler": "Also show change marks in the scrollbar overview ruler.",
+  "config.maxFileLines": "Files with more lines than this are not tracked.",
+  "config.debounceMs": "Delay in milliseconds after typing before the marks are refreshed. 0 refreshes immediately; raise it only if very large files feel slow.",
+  "config.language": "Language of the messages this extension shows. Command names and setting descriptions always follow the VS Code display language.",
+  "config.language.auto": "Follow the VS Code display language.",
+  "config.language.en": "English",
+  "config.language.zh-cn": "简体中文 (Simplified Chinese)"
+}

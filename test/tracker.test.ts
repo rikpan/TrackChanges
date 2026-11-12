@@ -219,10 +219,31 @@ test('two saves, undo both: both lines reverted; save: no marks', () => {
     assert.deepEqual(e.save().marks(), none);
 });
 
-test('two saved edits on one line, undo the second, save: green (first change remains)', () => {
+test('two saved edits on one line, undo the second: yellow; save: green', () => {
     const e = doc().type(1, 5, 'a').save().type(1, 6, 'b').save().undo();
-    assert.deepEqual(e.marks(), { ...none, reverted: [1] });
+    assert.deepEqual(e.marks(), { ...none, unsaved: [1] });
     assert.deepEqual(e.save().marks(), { ...none, saved: [1] });
+});
+
+test('two saved edits on one line, undo both: reverted only at the last undo', () => {
+    const e = doc().type(1, 5, 'a').save().type(1, 6, 'b').save().undo();
+    assert.deepEqual(e.marks(), { ...none, unsaved: [1] });
+    assert.deepEqual(e.undo().marks(), { ...none, reverted: [1] });
+    assert.deepEqual(e.save().marks(), none);
+});
+
+test('Enter, save, Enter, save, undo: green + yellow; undo: reverted; save: no marks', () => {
+    // Visual Studio: lines 4 and 5 in the user's screenshots.
+    const e = doc().type(1, 5, '\n').save().type(2, 0, '\n').save();
+    assert.deepEqual(e.marks(), { ...none, saved: [1, 2, 3] });
+    assert.deepEqual(e.undo().marks(), { ...none, saved: [1], unsaved: [2] });
+    assert.deepEqual(e.undo().marks(), { ...none, reverted: [1] });
+    assert.deepEqual(e.save().marks(), none);
+});
+
+test('Enter, save, Enter, save, undo, save: both green', () => {
+    const e = doc().type(1, 5, '\n').save().type(2, 0, '\n').save().undo().save();
+    assert.deepEqual(e.marks(), { ...none, saved: [1, 2] });
 });
 
 test('reverted line edited again turns yellow', () => {

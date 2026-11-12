@@ -6,16 +6,21 @@
 | --- | --- |
 | 🟨 黄色 | 已修改，尚未保存 |
 | 🟩 绿色 | 已修改，并且已保存 |
-| 🟧 橙色 | 保存后又改回了打开时的原始内容（例如保存后撤销） |
+| 🟧 橙色 | 修改已保存，之后又用撤销（Ctrl+Z）撤回了这次修改 |
 
-与 Visual Studio 一样，跟踪以**文件打开时的内容**为基准，与 Git 无关；关闭文件后记录清空。
+与 Visual Studio 一样，标记来自**编辑操作和撤销历史**，而不是比较文件内容（与 Git 无关）：
+
+- 每次编辑都会标记它碰到的行。输入一个字符再用 Backspace 删掉，内容虽然没变，这一行仍然是黄色。
+- 撤销会恢复编辑之前的标记：按回车再 Ctrl+Z，什么都不留下。
+- 只有撤销**已保存**的修改才会变橙；重做（Ctrl+Y）会恢复成绿色。
+- 每次打开文件都从零开始，关闭文件后记录清空。
 
 ## 命令
 
 | 命令 | 说明 | 快捷键 |
 | --- | --- | --- |
 | `Track Changes: Toggle Track Changes` | 开/关显示 | |
-| `Track Changes: Reset Tracking for Current File` | 以磁盘上的当前版本作为新基准，清除绿色/橙色标记 | |
+| `Track Changes: Reset Tracking for Current File` | 清除当前文件的所有标记，相当于重新打开 | |
 | `Track Changes: Reset Tracking for All Files` | 对所有打开的文件执行上述操作 | |
 | `Track Changes: Go to Next Change` | 跳到下一处修改 | `Ctrl+Alt+↓` / `Cmd+Alt+↓` |
 | `Track Changes: Go to Previous Change` | 跳到上一处修改 | `Ctrl+Alt+↑` / `Cmd+Alt+↑` |
@@ -27,7 +32,7 @@
 | `trackChanges.enabled` | `true` | 是否显示标记 |
 | `trackChanges.unsavedColor` | `#EFD700` | 未保存修改的颜色 |
 | `trackChanges.savedColor` | `#57A64A` | 已保存修改的颜色 |
-| `trackChanges.revertedColor` | `#F2A33A` | 已还原修改的颜色 |
+| `trackChanges.revertedColor` | `#F2A33A` | 已保存后又撤销的修改的颜色 |
 | `trackChanges.showInOverviewRuler` | `true` | 同时在滚动条概览中显示 |
 | `trackChanges.maxFileLines` | `100000` | 超过此行数的文件不跟踪 |
 | `trackChanges.debounceMs` | `150` | 输入停止后多久刷新标记（毫秒） |
@@ -35,7 +40,8 @@
 ## 说明
 
 - 标记画在 gutter 图标位置。如果同时启用了 VS Code 自带的 Git 修改标记（`scm.diffDecorations`），两者会并排显示；不想重复可以把它设为 `"overview"` 或 `"none"`。
-- 如果打开文件时它已有未保存的修改（例如重启后恢复的编辑），基准取磁盘上的内容，这些修改显示为黄色。
+- 在橙色状态下再保存，橙色变为绿色（磁盘内容又被改动过）。
+- 插件启动之前就已有的撤销历史无法对应，撤销这些修改时按普通编辑显示为黄色。
 - 删除行时，标记落在删除位置的下一行（与 Visual Studio 一致）。
 
 ## 开发

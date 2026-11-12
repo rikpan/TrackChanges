@@ -1,8 +1,8 @@
 {
   "name": "track-changes",
   "displayName": "Track Changes",
-  "description": "Visual Studio style change tracking in the gutter: yellow for unsaved changes, green for saved changes, orange for changes reverted after save.",
-  "version": "0.1.0",
+  "description": "Visual Studio style change tracking in the gutter: yellow for unsaved changes, green for saved changes, orange for saved changes that were undone.",
+  "version": "0.2.0",
   "publisher": "zhangyg",
   "license": "MIT",
   "engines": {
@@ -84,7 +84,7 @@
         "trackChanges.revertedColor": {
           "type": "string",
           "default": "#F2A33A",
-          "description": "Color of the mark for lines that were changed and saved, then edited back to their original content (Visual Studio: orange)."
+          "description": "Color of the mark for lines whose saved change was undone (Visual Studio: orange)."
         },
         "trackChanges.showInOverviewRuler": {
           "type": "boolean",
@@ -109,7 +109,7 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test": "npm run compile && node --test out/test/diff.test.js",
+    "test": "npm run compile && node --test out/test/tracker.test.js",
     "package": "vsce package",
     "vscode:prepublish": "npm run compile"
   },

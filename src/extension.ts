@@ -1,15 +1,10 @@
 import * as vscode from 'vscode';
-import { classify, Classification, splitLines } from './diff';
+import { hashText, LineTracker, Marks, TextChange } from './tracker';
 
 const TRACKED_SCHEMES = new Set(['file', 'untitled', 'vscode-remote', 'vscode-vfs', 'vscode-userdata']);
 
 interface DocState {
-    /** Lines when tracking started (file opened or tracking reset). */
-    original: string[];
-    /** Lines as last written to / read from disk. */
-    saved: string[];
-    /** Cached classification and the document version it belongs to. */
-    cache?: { version: number; result: Classification };
+    tracker: LineTracker;
     timer?: ReturnType<typeof setTimeout>;
 }
 
@@ -48,7 +43,7 @@ class TrackChanges implements vscode.Disposable {
     private readonly docs = new Map<string, DocState>();
     private readonly disposables: vscode.Disposable[] = [];
     private config = readConfig();
-    private types!: Record<keyof Classification, vscode.TextEditorDecorationType>;
+    private types!: Record<keyof Marks, vscode.TextEditorDecorationType>;
 
     constructor() {
         this.createDecorationTypes();
@@ -85,30 +80,11 @@ class TrackChanges implements vscode.Disposable {
 
     private track(doc: vscode.TextDocument): void {
         const key = doc.uri.toString();
-        if (!TRACKED_SCHEMES.has(doc.uri.scheme) || this.docs.has(key)) {
+        if (!TRACKED_SCHEMES.has(doc.uri.scheme) || this.docs.has(key) || doc.lineCount > this.config.maxFileLines) {
             return;
         }
-        const lines = splitLines(doc.getText());
-        const state: DocState = { original: lines, saved: lines };
-        this.docs.set(key, state);
-
-        // Opened with unsaved edits (e.g. restored after a restart): the baseline
-        // is what is on disk, so the existing edits show as unsaved.
-        if (doc.isDirty && doc.uri.scheme !== 'untitled') {
-            vscode.workspace.fs.readFile(doc.uri).then(
-                (bytes) => {
-                    if (this.docs.get(key) !== state) {
-                        return;
-                    }
-                    const disk = splitLines(new TextDecoder('utf-8').decode(bytes));
-                    state.original = disk;
-                    state.saved = disk;
-                    state.cache = undefined;
-                    this.renderDoc(doc);
-                },
-                () => undefined,
-            );
-        }
+        // Like Visual Studio, tracking starts clean when the file is opened.
+        this.docs.set(key, { tracker: new LineTracker(doc.lineCount, hashText(doc.getText())) });
     }
 
     private untrack(doc: vscode.TextDocument): void {
@@ -125,8 +101,7 @@ class TrackChanges implements vscode.Disposable {
         if (!state) {
             return;
         }
-        state.saved = splitLines(doc.getText());
-        state.cache = undefined;
+        state.tracker.save();
         this.renderDoc(doc);
     }
 
@@ -136,13 +111,33 @@ class TrackChanges implements vscode.Disposable {
         if (!state || e.contentChanges.length === 0) {
             return;
         }
-        // Not dirty after a change means the content matches the disk again:
-        // undo back to the saved state, "Revert File", or a reload after the file
-        // was changed outside the editor.
-        if (!doc.isDirty && doc.uri.scheme !== 'untitled') {
-            state.saved = splitLines(doc.getText());
+        if (doc.lineCount > this.config.maxFileLines) {
+            this.untrack(doc);
+            this.renderDoc(doc);
+            return;
         }
-        state.cache = undefined;
+        const changes: TextChange[] = e.contentChanges.map((c) => ({
+            startLine: c.range.start.line,
+            startChar: c.range.start.character,
+            endLine: c.range.end.line,
+            endChar: c.range.end.character,
+            text: c.text,
+        }));
+        const hash = hashText(doc.getText());
+        const lineAt = (line: number) => (line < doc.lineCount ? doc.lineAt(line).text : '');
+        const tracker = state.tracker;
+        if (e.reason === vscode.TextDocumentChangeReason.Undo) {
+            tracker.undo(changes, hash, lineAt);
+        } else if (e.reason === vscode.TextDocumentChangeReason.Redo) {
+            tracker.redo(changes, hash, lineAt);
+        } else {
+            tracker.edit(changes, hash, lineAt);
+            // Content replaced from disk ("Revert File", reload after an external change).
+            if (!doc.isDirty && doc.uri.scheme !== 'untitled') {
+                tracker.save();
+            }
+        }
+        tracker.sync(doc.lineCount);
         this.scheduleRender(doc, state);
     }
 
@@ -158,16 +153,8 @@ class TrackChanges implements vscode.Disposable {
 
     // ---- classification & rendering ---------------------------------------
 
-    private classification(doc: vscode.TextDocument): Classification | undefined {
-        const state = this.docs.get(doc.uri.toString());
-        if (!state || doc.lineCount > this.config.maxFileLines) {
-            return undefined;
-        }
-        if (state.cache?.version !== doc.version) {
-            const current = splitLines(doc.getText());
-            state.cache = { version: doc.version, result: classify(state.original, state.saved, current) };
-        }
-        return state.cache.result;
+    private classification(doc: vscode.TextDocument): Marks | undefined {
+        return this.docs.get(doc.uri.toString())?.tracker.marks();
     }
 
     private renderDoc(doc: vscode.TextDocument): void {
@@ -184,7 +171,7 @@ class TrackChanges implements vscode.Disposable {
 
     private render(editor: vscode.TextEditor): void {
         const result = this.config.enabled ? this.classification(editor.document) : undefined;
-        for (const kind of Object.keys(this.types) as (keyof Classification)[]) {
+        for (const kind of Object.keys(this.types) as (keyof Marks)[]) {
             const ranges = result ? result[kind].map((line) => new vscode.Range(line, 0, line, 0)) : [];
             editor.setDecorations(this.types[kind], ranges);
         }
@@ -220,12 +207,11 @@ class TrackChanges implements vscode.Disposable {
         vscode.window.setStatusBarMessage(`Track Changes ${next ? 'enabled' : 'disabled'}`, 2000);
     }
 
-    /** Forget saved/reverted history: the version on disk becomes the new baseline. */
+    /** Clear all marks, as if the file had just been opened. */
     private reset(doc: vscode.TextDocument): void {
         const state = this.docs.get(doc.uri.toString());
         if (state) {
-            state.original = state.saved;
-            state.cache = undefined;
+            state.tracker.reset();
             this.renderDoc(doc);
         }
     }

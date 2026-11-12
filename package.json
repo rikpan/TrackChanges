@@ -2,7 +2,7 @@
   "name": "track-changes",
   "displayName": "Track Changes",
   "description": "%description%",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "publisher": "rikpan",
   "author": "rikpan",
   "license": "MIT",
@@ -14,6 +14,7 @@
     "url": "https://github.com/rikpan/TrackChanges/issues"
   },
   "homepage": "https://github.com/rikpan/TrackChanges#readme",
+  "icon": "images/icon.png",
   "engines": {
     "vscode": "^1.75.0"
   },
@@ -142,7 +143,8 @@
     "watch": "tsc -watch -p ./",
     "test": "npm run compile && node --test out/test/tracker.test.js out/test/i18n.test.js",
     "package": "vsce package",
-    "vscode:prepublish": "npm run compile"
+    "vscode:prepublish": "npm run compile",
+    "icon": "node scripts/render-icon.js"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

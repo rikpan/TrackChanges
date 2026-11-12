@@ -7,3 +7,6 @@ out/test/**
 tsconfig.json
 .gitignore
 docs/**
+scripts/**
+images/*.svg
+images/icon-preview.png

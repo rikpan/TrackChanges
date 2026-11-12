@@ -1,5 +1,4 @@
 {
-  "description": "仿照 Visual Studio 的跟踪更改：在行号旁标出修改过的行。黄色为未保存，绿色为已保存，蓝色斜纹为撤销回原始内容。",
   "category": "跟踪更改",
   "command.toggle": "开启/关闭跟踪更改",
   "command.reset": "重置当前文件的跟踪",

@@ -1,0 +1,121 @@
+{
+  "name": "track-changes",
+  "displayName": "Track Changes",
+  "description": "Visual Studio style change tracking in the gutter: yellow for unsaved changes, green for saved changes, orange for changes reverted after save.",
+  "version": "0.1.0",
+  "publisher": "zhangyg",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "track changes",
+    "visual studio",
+    "gutter",
+    "modified lines"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/src/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "trackChanges.toggle",
+        "title": "Toggle Track Changes",
+        "category": "Track Changes"
+      },
+      {
+        "command": "trackChanges.reset",
+        "title": "Reset Tracking for Current File",
+        "category": "Track Changes"
+      },
+      {
+        "command": "trackChanges.resetAll",
+        "title": "Reset Tracking for All Files",
+        "category": "Track Changes"
+      },
+      {
+        "command": "trackChanges.nextChange",
+        "title": "Go to Next Change",
+        "category": "Track Changes"
+      },
+      {
+        "command": "trackChanges.previousChange",
+        "title": "Go to Previous Change",
+        "category": "Track Changes"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "trackChanges.nextChange",
+        "key": "ctrl+alt+down",
+        "mac": "cmd+alt+down",
+        "when": "editorTextFocus && config.trackChanges.enabled"
+      },
+      {
+        "command": "trackChanges.previousChange",
+        "key": "ctrl+alt+up",
+        "mac": "cmd+alt+up",
+        "when": "editorTextFocus && config.trackChanges.enabled"
+      }
+    ],
+    "configuration": {
+      "title": "Track Changes",
+      "properties": {
+        "trackChanges.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show change tracking marks in the editor gutter."
+        },
+        "trackChanges.unsavedColor": {
+          "type": "string",
+          "default": "#EFD700",
+          "description": "Color of the mark for lines changed but not yet saved (Visual Studio: yellow)."
+        },
+        "trackChanges.savedColor": {
+          "type": "string",
+          "default": "#57A64A",
+          "description": "Color of the mark for lines changed and saved since the file was opened (Visual Studio: green)."
+        },
+        "trackChanges.revertedColor": {
+          "type": "string",
+          "default": "#F2A33A",
+          "description": "Color of the mark for lines that were changed and saved, then edited back to their original content (Visual Studio: orange)."
+        },
+        "trackChanges.showInOverviewRuler": {
+          "type": "boolean",
+          "default": true,
+          "description": "Also show change marks in the scrollbar overview ruler."
+        },
+        "trackChanges.maxFileLines": {
+          "type": "number",
+          "default": 100000,
+          "minimum": 1,
+          "description": "Files with more lines than this are not tracked."
+        },
+        "trackChanges.debounceMs": {
+          "type": "number",
+          "default": 150,
+          "minimum": 0,
+          "description": "Delay in milliseconds after typing before the marks are refreshed."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "npm run compile && node --test out/test/diff.test.js",
+    "package": "vsce package",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.75.0",
+    "typescript": "^5.4.0"
+  }
+}
